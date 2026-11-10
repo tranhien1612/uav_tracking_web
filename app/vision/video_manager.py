@@ -242,13 +242,16 @@ class VideoManager:
                     )
                     status_text = trk_status
 
-                    if success and not is_centered:
-                        # 1. Điều khiển Gimbal camera bám tâm vật thể (giữ vật thể ở chính giữa)
-                        gimbal_ctrl.track_target(err_x, err_y, self.deadband_x, self.deadband_y)
+                    if success:
+                        # 1. Điều khiển Gimbal camera bám sát tâm tuyệt đối (0, 0) ngay lập tức
+                        gimbal_ctrl.track_target(err_x, err_y)
 
-                        # 2. Đồng thời tính toán vận tốc cho UAV (phục vụ điều khiển bay)
-                        target_vy, target_vz, target_yaw, cmd_up, cmd_down, cmd_left, cmd_right, cmd_yaw_left, cmd_yaw_right = self._compute_visual_servo_commands(err_x, err_y)
-                        cmd_stop = False
+                        # 2. Điều khiển bay UAV chỉ khi vượt ra ngoài vùng deadband của UAV
+                        if not is_centered:
+                            target_vy, target_vz, target_yaw, cmd_up, cmd_down, cmd_left, cmd_right, cmd_yaw_left, cmd_yaw_right = self._compute_visual_servo_commands(err_x, err_y)
+                            cmd_stop = False
+                        else:
+                            cmd_stop = True
                     else:
                         cmd_stop = True
                         gimbal_ctrl.stop_tracking()

@@ -104,12 +104,14 @@ class GimbalController:
         self._target_pitch = 0.0
         self._target_yaw = 0.0
         self._last_track_time = 0.0
+        self._filtered_spd_yaw = 0.0
+        self._filtered_spd_pitch = 0.0
 
-        # Hệ số điều khiển bám tâm mục tiêu (Visual Servoing Gains)
-        self.kp_pitch = 25.0       # Tốc độ góc deg/s trên mỗi đơn vị sai số normalized
-        self.kp_yaw = 30.0         # Tốc độ góc deg/s trên mỗi đơn vị sai số normalized
-        self.max_pitch_speed = 45.0  # Giới hạn tốc độ Pitch deg/s
-        self.max_yaw_speed = 60.0    # Giới hạn tốc độ Yaw deg/s
+        # Hệ số điều khiển bám tâm mục tiêu mượt mà (Smooth Damped Visual Servoing)
+        self.kp_pitch = 22.0       # Tốc độ góc deg/s trên mỗi đơn vị sai số normalized
+        self.kp_yaw = 28.0         # Tốc độ góc deg/s trên mỗi đơn vị sai số normalized
+        self.max_pitch_speed = 25.0  # Giới hạn tốc độ Pitch deg/s (tránh giật vọt lố)
+        self.max_yaw_speed = 35.0    # Giới hạn tốc độ Yaw deg/s (tránh giật vọt lố)
 
         # Telemetry phản hồi từ gimbal
         self.telemetry: Dict[str, Any] = {
@@ -465,14 +467,14 @@ class GimbalController:
     # =========================================================================
     # VISUAL SERVOING OBJECT TRACKING (BÁM TÂM VẬT THỂ)
     # =========================================================================
-    def track_target(self, err_x: float, err_y: float, deadband_x: float = 0.08, deadband_y: float = 0.08):
+    def track_target(self, err_x: float, err_y: float, deadband: float = 0.02):
         """
-        Tự động điều khiển Gimbal xoay Pitch & Yaw để đưa mục tiêu về chính giữa màn hình.
-        Sử dụng Angle Control vị trí thời gian thực (35Hz trực tiếp, không qua queue) để triệt tiêu độ trễ:
-        :param err_x: Độ lệch ngang chuẩn hóa [-1.0, 1.0] (err_x > 0 là vật thể lệch bên phải)
-        :param err_y: Độ lệch dọc chuẩn hóa [-1.0, 1.0] (err_y > 0 là vật thể lệch bên dưới)
-        :param deadband_x: Vùng chết trục ngang
-        :param deadband_y: Vùng chết trục dọc
+        Tự động điều khiển Gimbal xoay Pitch & Yaw để đưa mục tiêu về chính giữa màn hình (0, 0).
+        Sử dụng bộ điều khiển tỉ lệ mượt mà (Smooth Damped Proportional Control) với bộ lọc thông thấp (EWMA)
+        và continuous deadband để triệt tiêu hoàn toàn hiện tượng vọt lố và lắc lư qua lại:
+        1. Khi trong vùng deadband (<= 0.02): vận tốc về 0, gimbal đứng im không dao động.
+        2. Khi ngoài deadband: vận tốc tăng liên tục từ 0 (không bị giật bước nhảy).
+        3. Bộ lọc EWMA triệt tiêu rung giật do nhiễu pixel của bounding box.
         """
         if not self.is_connected:
             return
@@ -483,6 +485,8 @@ class GimbalController:
             if not self._is_active_tracking:
                 self._is_active_tracking = True
                 self._last_track_time = now
+                self._filtered_spd_yaw = 0.0
+                self._filtered_spd_pitch = 0.0
                 if self.telemetry.get("packets_received", 0) > 0 and self.telemetry.get("last_updated", 0) > 0:
                     self._target_pitch = self.telemetry.get("pitch", 0.0)
                     self._target_yaw = self.telemetry.get("yaw", 0.0)
@@ -493,21 +497,49 @@ class GimbalController:
                     except queue.Empty:
                         break
 
-            dt = max(0.01, min(0.1, now - self._last_track_time))
+            dt = max(0.01, min(0.06, now - self._last_track_time))
             self._last_track_time = now
 
-            # Trục Yaw (Ngang): Lệch phải (err_x > 0) -> Gimbal quay sang phải (tăng Yaw)
+            # --- TRỤC YAW (Ngang) ---
+            # Lệch phải (err_x > 0) -> Gimbal quay sang phải (tăng Yaw)
             # Lệch trái (err_x < 0) -> Gimbal quay sang trái (giảm Yaw)
-            if abs(err_x) > deadband_x:
-                delta_yaw = self.kp_yaw * err_x * dt
-                self._target_yaw = max(-160.0, min(160.0, self._target_yaw + delta_yaw))
+            if abs(err_x) <= deadband:
+                spd_yaw_target = 0.0
+                if abs(self._filtered_spd_yaw) < 0.2:
+                    self._filtered_spd_yaw = 0.0
+            else:
+                # Active error tính từ mép deadband -> liên tục về 0 khi tới tâm, triệt tiêu vọt lố
+                e_act_x = err_x - (deadband if err_x > 0 else -deadband)
+                spd_yaw_target = self.kp_yaw * e_act_x * (1.0 + 0.8 * min(1.0, abs(e_act_x)))
+                spd_yaw_target = max(-self.max_yaw_speed, min(self.max_yaw_speed, spd_yaw_target))
 
-            # Trục Pitch (Dọc):
+            # Bộ lọc thông thấp EWMA: làm mượt gia tốc, loại bỏ chấn động pixel
+            alpha = 0.40
+            if spd_yaw_target == 0.0 and self._filtered_spd_yaw == 0.0:
+                pass
+            else:
+                self._filtered_spd_yaw = alpha * spd_yaw_target + (1.0 - alpha) * self._filtered_spd_yaw
+
+            self._target_yaw = max(-160.0, min(160.0, self._target_yaw + self._filtered_spd_yaw * dt))
+
+            # --- TRỤC PITCH (Dọc) ---
             # err_y > 0 (vật thể ở dưới tâm màn hình) -> Gimbal chúc xuống (giảm Pitch)
             # err_y < 0 (vật thể ở trên tâm màn hình) -> Gimbal ngẩng lên (tăng Pitch)
-            if abs(err_y) > deadband_y:
-                delta_pitch = -self.kp_pitch * err_y * dt
-                self._target_pitch = max(-90.0, min(90.0, self._target_pitch + delta_pitch))
+            if abs(err_y) <= deadband:
+                spd_pitch_target = 0.0
+                if abs(self._filtered_spd_pitch) < 0.2:
+                    self._filtered_spd_pitch = 0.0
+            else:
+                e_act_y = err_y - (deadband if err_y > 0 else -deadband)
+                spd_pitch_target = -(self.kp_pitch * e_act_y * (1.0 + 0.8 * min(1.0, abs(e_act_y))))
+                spd_pitch_target = max(-self.max_pitch_speed, min(self.max_pitch_speed, spd_pitch_target))
+
+            if spd_pitch_target == 0.0 and self._filtered_spd_pitch == 0.0:
+                pass
+            else:
+                self._filtered_spd_pitch = alpha * spd_pitch_target + (1.0 - alpha) * self._filtered_spd_pitch
+
+            self._target_pitch = max(-90.0, min(90.0, self._target_pitch + self._filtered_spd_pitch * dt))
 
             # Cập nhật giá trị góc điều khiển (0.01 deg -> nhân 100)
             self._roll_ctrl_cdeg = 0
@@ -527,6 +559,8 @@ class GimbalController:
         """Dừng bám mục tiêu và giữ gimbal đứng im ở góc hiện tại."""
         with self._lock:
             self._is_active_tracking = False
+            self._filtered_spd_yaw = 0.0
+            self._filtered_spd_pitch = 0.0
             if self.telemetry.get("packets_received", 0) > 0 and self.telemetry.get("last_updated", 0) > 0:
                 cur_p = self.telemetry.get("pitch", 0.0)
                 cur_y = self.telemetry.get("yaw", 0.0)

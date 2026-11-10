@@ -870,14 +870,14 @@ class AeroTrackGCS {
   async emergencyStop() {
     try {
       await fetch('/api/mavlink/stop', { method: 'POST' });
-      await fetch('/api/tracking/cancel', { method: 'POST' }).catch(() => {});
+      await fetch('/api/tracking/cancel', { method: 'POST' }).catch(() => { });
       this.currentMode = 'STANDBY';
       this.isSelectingROI = false;
       this.trackedBbox = null;
       if (this.roiBanner) this.roiBanner.style.display = 'none';
       this.updateModeUI('STANDBY');
       this.renderCanvas();
-      this.addLog('Dừng hoạt động: UAV giữ vị trí đứng im, Gimbal dừng điều khiển.', 'warn');
+      this.addLog('Dừng quá trình bám mục tiêu.', 'warn');
     } catch (err) {
       console.error(err);
     }
@@ -886,7 +886,7 @@ class AeroTrackGCS {
   // --- MODE SELECTION ---
   async selectMode(mode) {
     if (!this.uavConnected) {
-      this.addLog('Cảnh báo: Chưa kết nối UAV! Hệ thống chỉ xử lý hình ảnh, UAV chưa thể nhận lệnh bay.', 'warn');
+      // this.addLog('Cảnh báo: Chưa kết nối UAV! Hệ thống chỉ xử lý hình ảnh, UAV chưa thể nhận lệnh bay.', 'warn');
     }
 
     this.currentMode = mode;
@@ -1102,7 +1102,7 @@ class AeroTrackGCS {
 
   async sendROI(bbox) {
     try {
-      this.addLog(`Khởi tạo bám điểm với vùng: [${bbox.join(', ')}]`, 'info');
+      // this.addLog(`Khởi tạo bám điểm với vùng: [${bbox.join(', ')}]`, 'info');
       const res = await fetch('/api/tracking/roi', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1113,7 +1113,7 @@ class AeroTrackGCS {
       if (data.status === 'ok') {
         this.trackedBbox = bbox;
         this.renderCanvas();
-        this.addLog('Đã khóa mục tiêu! UAV bắt đầu tự động bám tâm.', 'success');
+        this.addLog('Đã khóa mục tiêu! Bắt đầu tự động bám mục tiêu.', 'success');
       } else {
         this.addLog('Không thể khởi tạo theo dõi mục tiêu.', 'warn');
       }
