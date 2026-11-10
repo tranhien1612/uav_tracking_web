@@ -21,6 +21,9 @@ class Settings(BaseModel):
     # Control Target: "gimbal" (Điều khiển Camera Gimbal) hoặc "uav" (Điều khiển Máy bay MAVLink)
     CONTROL_TARGET: str = os.getenv("CONTROL_TARGET", "gimbal")
 
+    # Tracking Model: "csrt" (OpenCV CSRT) hoặc "nanotrack" (Deep Learning ONNX NanoTrack)
+    TRACKER_TYPE: str = os.getenv("TRACKER_TYPE", "nanotrack") #csrt nanotrack
+
     # Camera Gimbal Z-1Mini Serial settings
     GIMBAL_PORT: str = os.getenv("GIMBAL_PORT", "/dev/ttyUSB0")
     GIMBAL_BAUD: int = int(os.getenv("GIMBAL_BAUD", "115200"))

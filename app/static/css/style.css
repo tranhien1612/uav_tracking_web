@@ -1069,9 +1069,12 @@ body {
   cursor: not-allowed;
 }
 
-.conn-type-option input[type="radio"] {
+.conn-type-option input[type="radio"],
+.conn-type-option input[type="checkbox"] {
   accent-color: var(--color-primary);
   cursor: pointer;
+  width: 14px;
+  height: 14px;
 }
 
 .label-with-action {

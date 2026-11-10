@@ -2,6 +2,7 @@ fastapi
 uvicorn[standard]
 jinja2
 opencv-python
+opencv-contrib-python
 pymavlink
 pyserial
 numpy

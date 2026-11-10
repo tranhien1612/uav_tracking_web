@@ -27,8 +27,13 @@ class VideoManager:
         # Stream reader helper (continuous socket drainer)
         self.rtsp_reader = RTSPStreamReader(settings.RTSP_URL, settings.RTSP_TRANSPORT)
         
+        # Tracking Model Algorithm: "csrt" (default) or "nanotrack"
+        self.tracker_model: str = getattr(settings, "TRACKER_TYPE", "csrt").lower()
+        if self.tracker_model not in ["csrt", "nanotrack"]:
+            self.tracker_model = "csrt"
+
         # Vision engines
-        self.manual_tracker = ManualTracker()
+        self.manual_tracker = ManualTracker(tracker_type=self.tracker_model)
         
         # Frame dimensions
         self.width = settings.FRAME_WIDTH
@@ -77,7 +82,8 @@ class VideoManager:
             "rtsp_url": settings.RTSP_URL,
             "rtsp_connected": False,
             "rtsp_status": "CHƯA KẾT NỐI",
-            "control_target": self.control_target
+            "control_target": self.control_target,
+            "tracker_model": self.tracker_model
         }
         
         self._thread: Optional[threading.Thread] = None
@@ -125,6 +131,16 @@ class VideoManager:
             elif target == "gimbal":
                 mavlink_ctrl.send_stop()
             self.latest_state["control_target"] = self.control_target
+
+    def set_tracker_model(self, model_name: str):
+        """Switch active tracking model algorithm: 'csrt' or 'nanotrack'."""
+        model_name = model_name.lower().strip()
+        if model_name not in ["csrt", "nanotrack"]:
+            return
+        with self._lock:
+            self.tracker_model = model_name
+            self.manual_tracker.set_tracker_type(model_name)
+            self.latest_state["tracker_model"] = self.tracker_model
 
     def set_mode(self, mode: str):
         """Switch mode: STANDBY, TRACKING."""
@@ -299,7 +315,8 @@ class VideoManager:
                     "rtsp_url": self.rtsp_reader.rtsp_url,
                     "rtsp_connected": self.rtsp_reader.is_connected,
                     "rtsp_status": self.rtsp_reader.status_msg,
-                    "control_target": self.control_target
+                    "control_target": self.control_target,
+                    "tracker_model": self.tracker_model
                 })
 
     def _compute_visual_servo_commands(self, err_x: float, err_y: float):

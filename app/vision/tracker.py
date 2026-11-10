@@ -1,3 +1,4 @@
+import os
 import cv2
 import numpy as np
 import threading
@@ -5,13 +6,16 @@ from typing import Tuple, Optional, Dict, Any
 
 class ManualTracker:
     """
-    OpenCV CSRT (Channel and Spatial Reliability Tracker) for UAV / Gimbal visual servoing.
-    Provides state-of-the-art accuracy, robust scale handling (prevents bounding box shrinking),
-    and reliable tracking even during rapid motion or partial occlusion.
+    Object Tracker for UAV / Gimbal visual servoing supporting:
+    1. CSRT (Channel and Spatial Reliability Tracker): High precision, scale-stable.
+    2. NanoTrack (Siamese Deep Learning Tracker): Ultralight ONNX-based DNN tracker (~35+ FPS).
     Thread-safe with internal locking.
     """
-    def __init__(self):
+    def __init__(self, tracker_type: str = "csrt"):
         self._lock = threading.Lock()
+        self.tracker_type = tracker_type.lower().strip()
+        if self.tracker_type not in ["csrt", "nanotrack"]:
+            self.tracker_type = "csrt"
         self.tracker = None
         self.is_tracking = False
         self.bbox = None  # [x, y, w, h]
@@ -19,7 +23,50 @@ class ManualTracker:
         self.status = "IDLE"  # IDLE, TRACKING, LOST
         self.confidence = 1.0
 
-    def _create_tracker(self):
+    def set_tracker_type(self, tracker_type: str):
+        """Switch active tracking model algorithm."""
+        tracker_type = tracker_type.lower().strip()
+        if tracker_type not in ["csrt", "nanotrack"]:
+            return
+        with self._lock:
+            if self.tracker_type != tracker_type:
+                self.tracker_type = tracker_type
+                # Reset tracking if tracker type changes during runtime
+                if self.is_tracking:
+                    self.is_tracking = False
+                    self.tracker = None
+                    self.bbox = None
+                    self.target_center = None
+                    self.status = "IDLE"
+
+    def _create_nanotrack(self):
+        """Create OpenCV TrackerNano using ONNX deep learning models."""
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        models_dir = os.path.abspath(os.path.join(base_dir, "..", "models", "nanotrack"))
+        backbone_path = os.path.join(models_dir, "nanotrack_backbone_sim.onnx")
+        head_path = os.path.join(models_dir, "nanotrack_head_sim.onnx")
+
+        if not os.path.exists(backbone_path) or not os.path.exists(head_path):
+            raise FileNotFoundError(f"NanoTrack ONNX model files missing in {models_dir}")
+
+        if hasattr(cv2, 'TrackerNano_Params') and hasattr(cv2, 'TrackerNano_create'):
+            params = cv2.TrackerNano_Params()
+            params.backbone = backbone_path
+            params.neckhead = head_path
+            params.backend = cv2.dnn.DNN_BACKEND_OPENCV
+            params.target = cv2.dnn.DNN_TARGET_CPU
+            return cv2.TrackerNano_create(params)
+        elif hasattr(cv2, 'TrackerNano') and hasattr(cv2.TrackerNano, 'create'):
+            params = cv2.TrackerNano_Params()
+            params.backbone = backbone_path
+            params.neckhead = head_path
+            params.backend = cv2.dnn.DNN_BACKEND_OPENCV
+            params.target = cv2.dnn.DNN_TARGET_CPU
+            return cv2.TrackerNano.create(params)
+        else:
+            raise RuntimeError("TrackerNano is not supported in current OpenCV installation.")
+
+    def _create_csrt(self):
         """Create OpenCV CSRT tracker with fallback to KCF/MIL."""
         # 1. Primary: CSRT (highest accuracy, handles scale and deformation stably)
         if hasattr(cv2, 'TrackerCSRT_create'):
@@ -35,6 +82,16 @@ class ManualTracker:
             return cv2.TrackerMIL_create()
         else:
             raise RuntimeError("No suitable OpenCV Tracker found in cv2 installation.")
+
+    def _create_tracker(self):
+        """Create tracker based on selected algorithm (nanotrack or csrt)."""
+        if self.tracker_type == "nanotrack":
+            try:
+                return self._create_nanotrack()
+            except Exception as e:
+                print(f"[Tracker] NanoTrack initialization failed ({e}), falling back to CSRT.")
+                return self._create_csrt()
+        return self._create_csrt()
 
     def start_tracking(self, frame: np.ndarray, bbox: Tuple[int, int, int, int]) -> bool:
         """

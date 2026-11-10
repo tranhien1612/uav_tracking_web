@@ -30,6 +30,8 @@ from app.api.endpoints import (
     get_gimbal_telemetry,
     set_tracking_target,
     TrackingTargetRequest,
+    set_tracking_model,
+    TrackingModelRequest,
     update_gains,
     GainsRequest
 )
@@ -169,6 +171,25 @@ def test_api_tracking_target():
     # Reset back to default gimbal
     set_tracking_target(TrackingTargetRequest(control_target="gimbal"))
 
+def test_api_tracking_model():
+    # 1. Switch to nanotrack
+    res_nano = set_tracking_model(TrackingModelRequest(tracker_model="nanotrack"))
+    assert res_nano["status"] == "ok"
+    assert res_nano["tracker_model"] == "nanotrack"
+
+    # 2. Switch back to csrt
+    res_csrt = set_tracking_model(TrackingModelRequest(tracker_model="csrt"))
+    assert res_csrt["status"] == "ok"
+    assert res_csrt["tracker_model"] == "csrt"
+
+    # 3. Via gains endpoint
+    res_gains = update_gains(GainsRequest(tracker_model="nanotrack"))
+    assert res_gains["status"] == "ok"
+    assert res_gains["tracker_model"] == "nanotrack"
+
+    # Reset back to csrt
+    set_tracking_model(TrackingModelRequest(tracker_model="csrt"))
+
 if __name__ == "__main__":
     print("Running API endpoint tests...")
     test_api_state()
@@ -183,4 +204,5 @@ if __name__ == "__main__":
     test_api_mavlink_disconnect()
     test_api_gimbal_endpoints()
     test_api_tracking_target()
+    test_api_tracking_model()
     print("ALL API ENDPOINT TESTS PASSED!")

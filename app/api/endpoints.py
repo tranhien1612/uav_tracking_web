@@ -59,6 +59,9 @@ class DeadbandRequest(BaseModel):
 class TrackingTargetRequest(BaseModel):
     control_target: str  # "gimbal" or "uav"
 
+class TrackingModelRequest(BaseModel):
+    tracker_model: str  # "csrt" or "nanotrack"
+
 class GainsRequest(BaseModel):
     kp_sway: Optional[float] = None
     kp_climb: Optional[float] = None
@@ -66,6 +69,7 @@ class GainsRequest(BaseModel):
     deadband_x: Optional[float] = None
     deadband_y: Optional[float] = None
     control_target: Optional[str] = None
+    tracker_model: Optional[str] = None
 
 @router.get("/video_feed")
 async def video_feed():
@@ -258,6 +262,12 @@ def set_tracking_target(req: TrackingTargetRequest):
     video_manager.set_control_target(req.control_target)
     return {"status": "ok", "control_target": video_manager.control_target}
 
+@router.post("/settings/tracking_model")
+def set_tracking_model(req: TrackingModelRequest):
+    """Switch active tracking model: 'csrt' (OpenCV CSRT) or 'nanotrack' (Deep Learning NanoTrack)."""
+    video_manager.set_tracker_model(req.tracker_model)
+    return {"status": "ok", "tracker_model": video_manager.tracker_model}
+
 @router.post("/settings/gains")
 def update_gains(req: GainsRequest):
     """Tune servoing proportional gains and deadband."""
@@ -275,7 +285,14 @@ def update_gains(req: GainsRequest):
         video_manager.deadband_y = req.deadband_y
     if req.control_target is not None:
         video_manager.set_control_target(req.control_target)
-    return {"status": "ok", "message": "Gains updated.", "control_target": video_manager.control_target}
+    if req.tracker_model is not None:
+        video_manager.set_tracker_model(req.tracker_model)
+    return {
+        "status": "ok",
+        "message": "Gains updated.",
+        "control_target": video_manager.control_target,
+        "tracker_model": video_manager.tracker_model
+    }
 
 # =============================================================================
 # GIMBAL CONTROL ENDPOINTS (CAMERA Z-1MINI GCU PRIVATE PROTOCOL)

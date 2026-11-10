@@ -570,6 +570,36 @@
               </div>
             </div>
 
+            <!-- Box 0.1: Tracking Model (CSRT vs NanoTrack) -->
+            <div class="settings-section">
+              <h3 class="section-title">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                </svg>
+                Mô Hình Tracking (Tracking Model)
+              </h3>
+
+              <div class="form-group">
+                <label>Chọn mô hình tracking (chỉ chọn 1 loại):</label>
+                <div class="conn-type-toggle">
+                  <label class="conn-type-option" id="lbl-model-csrt">
+                    <input type="checkbox" id="chk-model-csrt" value="csrt" checked
+                      onchange="app.onTrackingModelCheckboxChange('csrt')">
+                    <span>CSRT (OpenCV)</span>
+                  </label>
+                  <label class="conn-type-option" id="lbl-model-nanotrack">
+                    <input type="checkbox" id="chk-model-nanotrack" value="nanotrack"
+                      onchange="app.onTrackingModelCheckboxChange('nanotrack')">
+                    <span>NanoTrack (AI / DNN)</span>
+                  </label>
+                </div>
+                <span class="form-hint" id="tracking-model-hint"
+                  style="display: block; margin-top: 6px; font-size: 0.74rem; color: var(--text-muted);">
+                  CSRT: Bộ lọc tương quan độ chính xác cao, bám kích thước mục tiêu cực kỳ ổn định.
+                </span>
+              </div>
+            </div>
+
             <!-- Box 1: Takeoff Settings -->
             <div class="settings-section">
               <h3 class="section-title">

@@ -27,6 +27,7 @@ class AeroTrackGCS {
     this.gimbalConnected = false;
     this._isTogglingGimbal = false;
     this.controlTarget = 'gimbal'; // 'gimbal' (default) or 'uav'
+    this.trackerModel = 'csrt'; // 'csrt' (default) or 'nanotrack'
     this.rtspConnected = false;
     this.lastRtspConnectedState = null;
     this._toastTimer = null;
@@ -299,6 +300,20 @@ class AeroTrackGCS {
       }
       this.onTrackingTargetChange(this.controlTarget || 'gimbal');
     }
+
+    // Sync Tracking Model Checkbox (CSRT vs NanoTrack)
+    const chkCsrt = document.getElementById('chk-model-csrt');
+    const chkNano = document.getElementById('chk-model-nanotrack');
+    if (chkCsrt && chkNano) {
+      if (this.trackerModel === 'nanotrack') {
+        chkNano.checked = true;
+        chkCsrt.checked = false;
+      } else {
+        chkCsrt.checked = true;
+        chkNano.checked = false;
+      }
+      this.onTrackingModelCheckboxChange(this.trackerModel || 'csrt');
+    }
   }
 
   onTrackingTargetChange(target) {
@@ -309,6 +324,28 @@ class AeroTrackGCS {
         hint.textContent = 'Điều khiển camera Gimbal quay để bám mục tiêu ở tâm khung hình (UAV giữ vị trí).';
       } else {
         hint.textContent = 'Giữ cố định camera Gimbal, điều khiển UAV bay (lên, xuống, trái, phải) để bám mục tiêu.';
+      }
+    }
+  }
+
+  onTrackingModelCheckboxChange(chosen) {
+    const chkCsrt = document.getElementById('chk-model-csrt');
+    const chkNano = document.getElementById('chk-model-nanotrack');
+    const hint = document.getElementById('tracking-model-hint');
+
+    if (chosen === 'nanotrack') {
+      if (chkNano) chkNano.checked = true;
+      if (chkCsrt) chkCsrt.checked = false;
+      this.trackerModel = 'nanotrack';
+      if (hint) {
+        hint.textContent = 'NanoTrack (AI / DNN): Mạng nơ-ron Siamese nhẹ, tốc độ cao (~35+ FPS), bám theo đặc trưng học sâu.';
+      }
+    } else {
+      if (chkCsrt) chkCsrt.checked = true;
+      if (chkNano) chkNano.checked = false;
+      this.trackerModel = 'csrt';
+      if (hint) {
+        hint.textContent = 'CSRT (OpenCV): Bộ lọc tương quan độ chính xác cao, bám kích thước mục tiêu cực kỳ chính xác.';
       }
     }
   }
@@ -655,6 +692,11 @@ class AeroTrackGCS {
     const controlTarget = targetEl ? targetEl.value : (this.controlTarget || 'gimbal');
     this.controlTarget = controlTarget;
 
+    // 0.1 Tracking Model (CSRT vs NanoTrack)
+    const chkNano = document.getElementById('chk-model-nanotrack');
+    const trackerModel = (chkNano && chkNano.checked) ? 'nanotrack' : 'csrt';
+    this.trackerModel = trackerModel;
+
     // 1. Takeoff Altitude
     const altInput = document.getElementById('setting-takeoff-alt');
     const valAlt = parseFloat(altInput ? altInput.value : 1.0);
@@ -682,6 +724,13 @@ class AeroTrackGCS {
         body: JSON.stringify({ control_target: controlTarget })
       }).catch(console.error);
 
+      // Save Tracking Model
+      await fetch('/api/settings/tracking_model', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tracker_model: trackerModel })
+      }).catch(console.error);
+
       // Save Deadband
       const resDb = await fetch('/api/settings/deadband', {
         method: 'POST',
@@ -702,11 +751,12 @@ class AeroTrackGCS {
           kp_yaw: kpYaw,
           deadband_x: dbX,
           deadband_y: dbY,
-          control_target: controlTarget
+          control_target: controlTarget,
+          tracker_model: trackerModel
         })
       });
 
-      this.addLog(`Đã cập nhật phương thức bám: ${controlTarget === 'uav' ? '🚁 Dùng UAV' : '📷 Dùng Gimbal'}`, 'info');
+      this.addLog(`Đã cập nhật phương thức bám: ${controlTarget === 'uav' ? '🚁 Dùng UAV' : '📷 Dùng Gimbal'} | Mô hình: ${trackerModel === 'nanotrack' ? '⚡ NanoTrack' : '🎯 CSRT'}`, 'info');
       this.renderCanvas();
       this.closeSettingsModal();
     } catch (err) {
@@ -1451,6 +1501,7 @@ class AeroTrackGCS {
     if (vision.deadband_y !== undefined) this.deadbandY = vision.deadband_y;
     this.isCentered = !!vision.is_centered;
     if (vision.control_target) this.controlTarget = vision.control_target;
+    if (vision.tracker_model) this.trackerModel = vision.tracker_model;
 
     if (this.currentMode === 'TRACKING') {
       if (this.isSelectingROI || this.isDrawingROI) {

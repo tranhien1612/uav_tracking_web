@@ -48,9 +48,28 @@ def test_manual_tracker_stop():
     assert tracker.bbox is None
     assert tracker.status == "IDLE"
 
+def test_nanotrack_switching_and_update():
+    tracker = ManualTracker(tracker_type="nanotrack")
+    assert tracker.tracker_type == "nanotrack"
+    frame = create_synthetic_frame(circle_pos=(320, 240))
+    success = tracker.start_tracking(frame, (300, 220, 40, 40))
+    assert success is True
+    assert tracker.is_tracking is True
+
+    frame2 = create_synthetic_frame(circle_pos=(330, 250))
+    ok, bbox, ex, ey, is_centered, status = tracker.update(frame2, 640, 480, deadband_x=0.08, deadband_y=0.08)
+    assert ok is True
+    assert status == "ĐANG THEO DÕI"
+
+    # Switch back to csrt
+    tracker.set_tracker_type("csrt")
+    assert tracker.tracker_type == "csrt"
+    assert tracker.is_tracking is False
+
 if __name__ == "__main__":
     print("Running vision unit tests...")
     test_manual_tracker_initialization()
     test_manual_tracker_update()
     test_manual_tracker_stop()
+    test_nanotrack_switching_and_update()
     print("ALL VISION TESTS PASSED!")
