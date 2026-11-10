@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+jinja2
+opencv-python
+pymavlink
+pyserial
+numpy
+python-multipart
+python-dotenv
+websockets

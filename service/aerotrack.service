@@ -1,0 +1,20 @@
+[Unit]
+Description=AERO-TRACK GCS Web Service
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/tracking_uav_web
+ExecStart=/home/ubuntu/tracking_uav_web/.venv/bin/python /home/ubuntu/tracking_uav_web/run.py
+Restart=always
+RestartSec=3
+Environment=PYTHONUNBUFFERED=1
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+

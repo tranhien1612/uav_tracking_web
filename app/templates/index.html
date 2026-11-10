@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AERO-TRACK GCS | Điều Khiển & Bám Điểm UAV</title>
+
+  <!-- Font: Inter (UI hiện đại, sạch sẽ) & JetBrains Mono (Số đo kỹ thuật) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap"
+    rel="stylesheet">
+
+  <!-- App Stylesheet -->
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+
+<body>
+  <!-- Top Navigation Bar -->
+  <header class="app-header">
+    <div class="header-brand">
+      <div class="brand-badge">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 3v6M12 15v6M3 12h6M15 12h6" />
+        </svg>
+      </div>
+      <div class="brand-info">
+        <h1 class="brand-title">AERO-TRACK GCS</h1>
+        <p class="brand-subtitle">Hệ Thống Bám Mục Tiêu</p>
+      </div>
+    </div>
+
+    <!-- Header Actions (Settings & Fullscreen Buttons) -->
+    <div class="header-actions">
+      <button class="btn-header-icon" id="btn-open-settings" onclick="app.openSettingsModal()"
+        title="Cài đặt hệ thống (Settings)">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3" />
+          <path
+            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        </svg>
+      </button>
+
+      <button class="btn-header-icon" id="btn-toggle-fullscreen" onclick="app.toggleFullscreen()"
+        title="Toàn màn hình / Thu nhỏ (F11)">
+        <span id="fullscreen-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+          </svg>
+        </span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main GCS View (2-Column: Video Stage on Left/Center, Control Panel on Right) -->
+  <main class="app-main">
+    <!-- LEFT/CENTER: Large Video Stream Viewport -->
+    <section class="video-container">
+      <div class="video-card">
+        <div class="video-wrapper" id="video-wrapper">
+          <!-- Live Video Element (Fit to height) -->
+          <img id="camera-stream" src="/api/video_feed" alt="RTSP Video Stream" class="video-stream-img">
+
+          <!-- Interactive HUD Canvas for Drawing ROI -->
+          <canvas id="hud-canvas" class="hud-canvas"></canvas>
+        </div>
+
+        <!-- Dynamic ROI Instruction Banner -->
+        <div class="roi-banner" id="roi-banner" style="display: none;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+          </svg>
+          <span>Nhấn giữ & kéo chuột để khoanh vùng mục tiêu</span>
+        </div>
+
+        <!-- Video Stream Notification Toast (Auto-hiding pill banner) -->
+        <div class="video-toast-banner" id="video-toast-banner" style="display: none;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M23 7l-7 5 7 5V7z" />
+            <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+          </svg>
+          <span id="video-toast-text">Đang kết nối luồng RTSP...</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT: Dedicated UAV Telemetry & Control Panel -->
+    <aside class="sidebar-right">
+      <!-- PANEL 1: UAV Telemetry Info -->
+      <div class="panel-card">
+        <div class="card-header">
+          <h2 class="card-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+            </svg>
+            Thông Tin Máy Bay
+          </h2>
+        </div>
+
+        <div class="telemetry-grid">
+          <div class="telem-item">
+            <span class="telem-label">TRẠNG THÁI</span>
+            <span class="telem-val" id="val-mav-conn-status">Disconnected</span>
+          </div>
+
+          <div class="telem-item">
+            <span class="telem-label">CHẾ ĐỘ BAY</span>
+            <span class="telem-val text-primary" id="val-mav-mode">--</span>
+          </div>
+
+          <div class="telem-item">
+            <span class="telem-label">TRẠNG THÁI ARM</span>
+            <span class="telem-val" id="val-arm-status">DISARMED</span>
+          </div>
+
+          <div class="telem-item">
+            <span class="telem-label">ĐỘ CAO</span>
+            <span class="telem-val text-accent" id="val-altitude">0.0 m</span>
+          </div>
+
+          <div class="telem-item full-row">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span class="telem-label">GÓC GIMBAL (P/Y)</span>
+              <span class="telem-val text-primary" id="val-gimbal-angles">0.0° / 0.0°</span>
+            </div>
+          </div>
+
+          <div class="telem-item full-row">
+            <div class="battery-row">
+              <span class="telem-label">DUNG LƯỢNG PIN</span>
+              <span class="telem-val text-warning" id="val-battery">0% (0.0V)</span>
+            </div>
+            <div class="battery-bar-bg">
+              <div class="battery-bar-fill" id="battery-bar" style="width: 0%"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PANEL 2: Operation Modes & Emergency Stop -->
+      <div class="panel-card">
+        <div class="card-header">
+          <h2 class="card-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10" />
+              <circle cx="12" cy="12" r="4" />
+            </svg>
+            Chế Độ Hoạt Động
+          </h2>
+        </div>
+
+        <div class="mode-buttons-group">
+          <!-- STANDBY / STOP MODE -->
+          <div class="mode-control-block">
+            <button class="btn btn-mode active-mode" id="btn-emergency-stop" onclick="app.emergencyStop()"
+              title="Dừng hoạt động, hủy bám điểm">
+              <div class="btn-mode-left">
+                <span class="mode-icon">⏹️</span>
+                <div class="mode-text-group">
+                  <span class="mode-name">Dừng hoạt động</span>
+                  <span class="mode-hint">Hủy bám điểm</span>
+                </div>
+              </div>
+            </button>
+          </div>
+
+          <!-- MODE: Manual Tracking -->
+          <div class="mode-control-block">
+            <button class="btn btn-mode" id="btn-mode-tracking" onclick="app.selectMode('TRACKING')">
+              <div class="btn-mode-left">
+                <span class="mode-icon">🎯</span>
+                <div class="mode-text-group">
+                  <span class="mode-name">Theo Dõi Thủ Công</span>
+                  <span class="mode-hint">Khoanh vùng vật thể trên video</span>
+                </div>
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- PANEL 3: Manual Flight Nudge (Disabled when not connected) -->
+      <div class="panel-card" id="card-manual-controls">
+        <div class="card-header">
+          <h2 class="card-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="12 2 19 21 12 17 5 21 12 2" />
+            </svg>
+            Điều Khiển Thủ Công
+          </h2>
+          <span class="conn-lock-badge" id="manual-lock-indicator">🔒 Cần kết nối UAV</span>
+        </div>
+
+        <div class="nudge-pad-wrapper" id="nudge-pad-wrapper">
+          <!-- Combined Dynamic Flight Action: Takeoff / Land -->
+          <div class="manual-flight-actions">
+            <button class="btn btn-flight-action btn-takeoff" id="btn-uav-flight-action"
+              onclick="app.handleFlightAction()" title="Cất cánh / Hạ cánh tự động dựa trên trạng thái máy bay">
+              <span id="flight-action-icon">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 19V5M5 12l7-7 7 7" />
+                </svg>
+              </span>
+              <span id="flight-action-text">Cất Cánh (Takeoff)</span>
+            </button>
+          </div>
+
+          <div class="nudge-pad">
+            <!-- Row 1 -->
+            <button class="btn-nudge" id="nudge-yaw-left" onmousedown="app.startNudge('yaw_left')"
+              onmouseup="app.stopNudge()" onmouseleave="app.stopNudge()" ontouchstart="app.startNudge('yaw_left')"
+              ontouchend="app.stopNudge()" title="Quay trái">
+              <span class="nudge-icon">⟲</span>
+              <span class="nudge-text">Quay T</span>
+            </button>
+            <button class="btn-nudge btn-nudge-primary" id="nudge-up" onmousedown="app.startNudge('up')"
+              onmouseup="app.stopNudge()" onmouseleave="app.stopNudge()" ontouchstart="app.startNudge('up')"
+              ontouchend="app.stopNudge()" title="Lên">
+              <span class="nudge-icon">▲</span>
+              <span class="nudge-text">Lên</span>
+            </button>
+            <button class="btn-nudge" id="nudge-yaw-right" onmousedown="app.startNudge('yaw_right')"
+              onmouseup="app.stopNudge()" onmouseleave="app.stopNudge()" ontouchstart="app.startNudge('yaw_right')"
+              ontouchend="app.stopNudge()" title="Quay phải">
+              <span class="nudge-icon">⟳</span>
+              <span class="nudge-text">Quay P</span>
+            </button>
+
+            <!-- Row 2 -->
+            <button class="btn-nudge" id="nudge-left" onmousedown="app.startNudge('left')" onmouseup="app.stopNudge()"
+              onmouseleave="app.stopNudge()" ontouchstart="app.startNudge('left')" ontouchend="app.stopNudge()"
+              title="Sang trái">
+              <span class="nudge-icon">◄</span>
+              <span class="nudge-text">Trái</span>
+            </button>
+            <button class="btn-nudge btn-nudge-stop" id="nudge-stop" onclick="app.emergencyStop()" title="Dừng">
+              <span class="nudge-icon">🛑</span>
+              <span class="nudge-text">Dừng</span>
+            </button>
+            <button class="btn-nudge" id="nudge-right" onmousedown="app.startNudge('right')" onmouseup="app.stopNudge()"
+              onmouseleave="app.stopNudge()" ontouchstart="app.startNudge('right')" ontouchend="app.stopNudge()"
+              title="Sang phải">
+              <span class="nudge-icon">►</span>
+              <span class="nudge-text">Phải</span>
+            </button>
+
+            <!-- Row 3 -->
+            <div class="nudge-empty"></div>
+            <button class="btn-nudge btn-nudge-primary" id="nudge-down" onmousedown="app.startNudge('down')"
+              onmouseup="app.stopNudge()" onmouseleave="app.stopNudge()" ontouchstart="app.startNudge('down')"
+              ontouchend="app.stopNudge()" title="Xuống">
+              <span class="nudge-icon">▼</span>
+              <span class="nudge-text">Xuống</span>
+            </button>
+            <div class="nudge-empty"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PANEL 4: Flight & Event Log -->
+      <div class="panel-card log-panel-card">
+        <div class="card-header">
+          <h2 class="card-title">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+            </svg>
+            Nhật Ký Hoạt Động
+          </h2>
+          <button class="btn-text-link" onclick="app.clearLogs()">Xóa log</button>
+        </div>
+
+        <div class="log-console" id="log-console">
+          <!-- <div class="log-row log-info">[INFO] Hệ thống AERO-TRACK đã khởi động.</div> -->
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- ========================================================================= -->
+  <!-- SETTINGS MODAL DIALOG (Wide 3-Tab Architecture: Connection, Video, Params)  -->
+  <!-- ========================================================================= -->
+  <div class="modal-backdrop" id="settings-modal" style="display: none;">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <span class="modal-title-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path
+                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+          </span>
+          <h2 class="modal-title">Cài Đặt Hệ Thống (Settings)</h2>
+        </div>
+        <button class="btn-close-modal" onclick="app.closeSettingsModal()" title="Đóng cửa sổ">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Settings 4-Tab Bar -->
+      <div class="settings-tabs-nav">
+        <button type="button" class="settings-tab-btn active" id="tab-btn-conn"
+          onclick="app.switchSettingsTab('connection')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01" />
+          </svg>
+          <span>Kết Nối UAV</span>
+        </button>
+
+        <button type="button" class="settings-tab-btn" id="tab-btn-gimbal" onclick="app.switchSettingsTab('gimbal')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+            <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+            <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+          </svg>
+          <span>Kết Nối Gimbal</span>
+        </button>
+
+        <button type="button" class="settings-tab-btn" id="tab-btn-video" onclick="app.switchSettingsTab('video')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M23 7l-7 5 7 5V7z" />
+            <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+          </svg>
+          <span>Luồng Video</span>
+        </button>
+
+        <button type="button" class="settings-tab-btn" id="tab-btn-params"
+          onclick="app.switchSettingsTab('parameters')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3" />
+            <path
+              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+          <span>Thông Số</span>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <!-- ========================================== -->
+        <!-- TAB 1: CONNECTION (MAVLINK ARDUPILOT)       -->
+        <!-- ========================================== -->
+        <div class="settings-tab-pane active" id="pane-connection">
+          <div class="settings-tab-grid">
+            <!-- Col 1: Connection Type & Parameters -->
+            <div class="settings-section">
+              <h3 class="section-title">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path
+                    d="M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01" />
+                </svg>
+                Cấu Hình Cổng Kết Nối UAV (MAVLink ArduPilot)
+              </h3>
+
+              <!-- Lock Hint when UAV is Connected -->
+              <div id="mav-locked-warning" class="settings-lock-hint" style="display: none;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+                <span>Đang kết nối UAV. Hãy ngắt kết nối để thay đổi cổng COM hoặc Baudrate.</span>
+              </div>
+
+              <!-- Connection Type Toggle (Serial / UDP) -->
+              <div class="form-group">
+                <label>Giao thức truyền dẫn:</label>
+                <div class="conn-type-toggle">
+                  <label class="conn-type-option" id="lbl-conn-serial">
+                    <input type="radio" name="conn-type" id="conn-type-serial" value="serial" checked
+                      onchange="app.onConnTypeChange('serial')">
+                    <span>Serial</span>
+                  </label>
+                  <label class="conn-type-option" id="lbl-conn-udp">
+                    <input type="radio" name="conn-type" id="conn-type-udp" value="udp"
+                      onchange="app.onConnTypeChange('udp')">
+                    <span>UDP</span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Serial Connection Fields -->
+              <div id="box-conn-serial">
+                <div class="form-row-2">
+                  <div class="form-group">
+                    <div class="label-with-action">
+                      <label for="setting-mav-serial-port">Cổng Serial (COM / TTY):</label>
+                      <button type="button" id="btn-scan-ports" class="btn-inline-link"
+                        onclick="app.loadSerialPorts()">↻ Quét cổng</button>
+                    </div>
+                    <select id="setting-mav-serial-port" class="form-select">
+                      <option value="COM3">COM3</option>
+                    </select>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="setting-mav-baud">Baudrate:</label>
+                    <select id="setting-mav-baud" class="form-select">
+                      <option value="921600">921600</option>
+                      <option value="115200" selected>115200</option>
+                      <option value="57600">57600</option>
+                      <option value="38400">38400</option>
+                      <option value="19200">19200</option>
+                      <option value="9600">9600</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <!-- UDP Connection Fields -->
+              <div id="box-conn-udp" style="display: none;">
+                <div class="form-row-2">
+                  <div class="form-group">
+                    <label for="setting-mav-ip">Địa chỉ IP Drone / SITL:</label>
+                    <input type="text" id="setting-mav-ip" class="form-input" value="0.0.0.0" placeholder="0.0.0.0">
+                  </div>
+                  <div class="form-group">
+                    <label for="setting-mav-port">Cổng Port UDP:</label>
+                    <input type="number" id="setting-mav-port" class="form-input" value="14550" placeholder="14550">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Connect Button -->
+              <div class="form-group mt-2">
+                <button id="btn-mav-toggle-conn" type="button" class="btn btn-primary btn-block"
+                  onclick="app.toggleMAVLinkConnection(event)">
+                  <span id="btn-mav-toggle-text" style="pointer-events: none;">Kết Nối Máy Bay</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- TAB 2: GIMBAL CONNECTION (Z-1MINI GCU)     -->
+        <!-- ========================================== -->
+        <div class="settings-tab-pane" id="pane-gimbal">
+          <div class="settings-tab-grid">
+            <div class="settings-section">
+              <h3 class="section-title">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+                  <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+                  <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+                </svg>
+                Cấu Hình Cổng Kết Nối Gimbal Camera (Z-1Mini GCU)
+              </h3>
+
+              <div id="gimbal-conn-text" class="settings-lock-hint">
+                <span>Trạng thái: Chưa kết nối</span>
+              </div>
+
+              <div class="form-row-2 mt-2">
+                <div class="form-group">
+                  <div class="label-with-action">
+                    <label for="setting-gimbal-port">Cổng Serial Gimbal:</label>
+                    <button type="button" id="btn-scan-gimbal-ports" class="btn-inline-link"
+                      onclick="app.loadGimbalSerialPorts()">↻ Quét cổng</button>
+                  </div>
+                  <select id="setting-gimbal-port" class="form-select">
+                    <option value="/dev/ttyUSB0">/dev/ttyUSB0</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label for="setting-gimbal-baud">Baudrate:</label>
+                  <select id="setting-gimbal-baud" class="form-select">
+                    <option value="115200" selected>115200 (Mặc định GCU)</option>
+                    <option value="921600">921600</option>
+                    <option value="500000">500000</option>
+                    <option value="250000">250000</option>
+                    <option value="57600">57600</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-group mt-2">
+                <button id="btn-gimbal-toggle-conn" type="button" class="btn btn-primary btn-block"
+                  onclick="app.toggleGimbalConnection(event)">
+                  <span id="btn-gimbal-toggle-text">Kết Nối Gimbal</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- TAB 3: VIDEO STREAM (CAMERA RTSP)          -->
+        <!-- ========================================== -->
+        <div class="settings-tab-pane" id="pane-video">
+          <div class="settings-tab-grid">
+            <!-- RTSP Config (Full Width) -->
+            <div class="settings-section">
+              <h3 class="section-title">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M23 7l-7 5 7 5V7z" />
+                  <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+                </svg>
+                Cấu Hình Luồng Video Camera RTSP
+              </h3>
+
+              <div class="form-group">
+                <label for="setting-rtsp-url">Đường dẫn luồng Video (RTSP URL):</label>
+                <input type="text" id="setting-rtsp-url" class="form-input" value="rtsp://192.168.144.108"
+                  placeholder="rtsp://ip:port/stream hoặc http://ip:port/live">
+              </div>
+
+              <div class="form-group mt-1">
+                <label for="setting-rtsp-transport">Giao thức truyền vận (RTSP Transport):</label>
+                <select id="setting-rtsp-transport" class="form-select">
+                  <option value="tcp" selected>TCP</option>
+                  <option value="udp">UDP</option>
+                </select>
+              </div>
+
+              <div class="form-group mt-2">
+                <button class="btn btn-primary btn-block" onclick="app.saveRTSPSetting()">
+                  <span>Áp Dụng & Kết Nối RTSP</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- TAB 3: PARAMETERS (HỆ THỐNG & ĐIỀU KHIỂN)    -->
+        <!-- ========================================== -->
+        <div class="settings-tab-pane" id="pane-parameters">
+          <div class="settings-tab-grid">
+            <!-- Box 1: Takeoff Settings -->
+            <div class="settings-section">
+              <h3 class="section-title">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 19V5M5 12l7-7 7 7" />
+                </svg>
+                Độ Cao Cất Cánh
+              </h3>
+
+              <div class="form-group">
+                <label for="setting-takeoff-alt">Độ cao cất cánh mặc định (mét):</label>
+                <input type="number" id="setting-takeoff-alt" class="form-input" min="0.5" max="50" step="0.5"
+                  value="1.0" placeholder="1.0">
+              </div>
+            </div>
+
+            <!-- Box 2: Deadband Region -->
+            <div class="settings-section">
+              <h3 class="section-title">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+                Deadband Box
+              </h3>
+
+              <div class="form-row-2">
+                <div class="form-group">
+                  <label for="setting-deadband-x">Độ rộng X (%):</label>
+                  <input type="number" id="setting-deadband-x" class="form-input" min="1" max="50" step="1" value="8">
+                </div>
+                <div class="form-group">
+                  <label for="setting-deadband-y">Độ cao Y (%):</label>
+                  <input type="number" id="setting-deadband-y" class="form-input" min="1" max="50" step="1" value="8">
+                </div>
+              </div>
+            </div>
+
+            <!-- Box 3: Servo Gains & Speeds -->
+            <div class="settings-section">
+              <h3 class="section-title">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0" />
+                </svg>
+                Hệ Số Điều Khiển (Gains)
+              </h3>
+
+              <div class="form-row-2">
+                <div class="form-group">
+                  <label for="setting-kp-sway">Kp Sway (Trái/Phải):</label>
+                  <input type="number" id="setting-kp-sway" class="form-input" min="0.1" max="3.0" step="0.1"
+                    value="0.8">
+                </div>
+                <div class="form-group">
+                  <label for="setting-kp-climb">Kp Climb (Lên/Xuống):</label>
+                  <input type="number" id="setting-kp-climb" class="form-input" min="0.1" max="3.0" step="0.1"
+                    value="0.7">
+                </div>
+              </div>
+
+              <div class="form-group mt-1">
+                <label for="setting-kp-yaw">Kp Yaw (Xoay góc):</label>
+                <input type="number" id="setting-kp-yaw" class="form-input" min="0.1" max="2.0" step="0.1" value="0.6">
+              </div>
+            </div>
+
+            <!-- Apply Button -->
+            <div class="form-group mt-1">
+              <button class="btn btn-primary btn-block" onclick="app.saveAllParameters()">
+                <span>Áp Dụng</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Client JavaScript -->
+  <script src="/static/js/app.js"></script>
+</body>
+
+</html>
