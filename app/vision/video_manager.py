@@ -60,6 +60,8 @@ class VideoManager:
         self._jpeg_id = 0
         self.is_running = False
         self._lock = threading.Lock()
+        self._cached_raw_dim: Optional[Tuple[int, int]] = None
+        self._cached_target_wh: Optional[Tuple[int, int]] = None
 
         # Pre-encoded placeholder JPEG for when camera stream is waiting / offline
         self._placeholder_frame = np.zeros((self.height, self.width, 3), dtype=np.uint8)
@@ -207,11 +209,12 @@ class VideoManager:
 
             # Standardize frame resolution: if camera feed is Full-HD (>960 width),
             # downscale to 960px width for both web streaming and vision processing.
-            # This guarantees 1:1 pixel coordinate alignment between canvas ROI and tracker,
-            # while keeping CPU usage minimal (<10ms per frame).
-            if raw_frame.shape[1] > 960:
-                scale = 960.0 / raw_frame.shape[1]
-                frame = cv2.resize(raw_frame, (960, int(raw_frame.shape[0] * scale)), interpolation=cv2.INTER_LINEAR)
+            raw_h, raw_w = raw_frame.shape[:2]
+            if raw_w > 960:
+                if self._cached_raw_dim != (raw_h, raw_w):
+                    self._cached_raw_dim = (raw_h, raw_w)
+                    self._cached_target_wh = (960, int(round(raw_h * (960.0 / raw_w))))
+                frame = cv2.resize(raw_frame, self._cached_target_wh, interpolation=cv2.INTER_LINEAR)
             else:
                 frame = raw_frame
 
@@ -268,7 +271,10 @@ class VideoManager:
                             # 1. Điều khiển Gimbal camera bám sát tâm tuyệt đối (0, 0) ngay lập tức
                             gimbal_ctrl.track_target(err_x, err_y)
                             cmd_stop = True
-                            status_text = f"{trk_status} (GIMBAL)"
+                            if not gimbal_ctrl.is_connected:
+                                status_text = f"{trk_status} (CHƯA KẾT NỐI GIMBAL)"
+                            else:
+                                status_text = f"{trk_status} (GIMBAL)"
                         else:
                             # 2. Không điều khiển gimbal, điều khiển UAV bay (lên/xuống/trái/phải) để bám tâm
                             gimbal_ctrl.stop_tracking()

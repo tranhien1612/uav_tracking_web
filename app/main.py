@@ -16,7 +16,6 @@ from app.api.endpoints import router as api_router, websocket_telemetry
 from app.vision.video_manager import video_manager
 from app.core.mavlink_controller import mavlink_ctrl
 from app.core.gimbal_controller import gimbal_ctrl
-from app.core.config import settings
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")

@@ -36,8 +36,7 @@
 
     <!-- Header Actions (Settings & Fullscreen Buttons) -->
     <div class="header-actions">
-      <button class="btn-header-icon" id="btn-open-settings" onclick="app.openSettingsModal()"
-        title="Cài đặt hệ thống (Settings)">
+      <button class="btn-header-icon" id="btn-open-settings" onclick="app.openSettingsModal()" title="Cài đặt hệ thống">
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
           stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="3" />
@@ -127,7 +126,10 @@
           <div class="telem-item full-row">
             <div style="display: flex; justify-content: space-between; align-items: center;">
               <span class="telem-label">GÓC GIMBAL (P/Y)</span>
-              <span class="telem-val text-primary" id="val-gimbal-angles">0.0°/0.0°</span>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span id="val-gimbal-status" class="telem-val text-danger" style="font-size: 0.72rem;">Disconnected</span>
+                <span class="telem-val text-primary" id="val-gimbal-angles">0.0°/0.0°</span>
+              </div>
             </div>
           </div>
 
@@ -299,7 +301,7 @@
                 d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
             </svg>
           </span>
-          <h2 class="modal-title">Cài Đặt Hệ Thống (Settings)</h2>
+          <h2 class="modal-title">Cài Đặt Hệ Thống</h2>
         </div>
         <button class="btn-close-modal" onclick="app.closeSettingsModal()" title="Đóng cửa sổ">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
@@ -361,7 +363,7 @@
                   <path
                     d="M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01" />
                 </svg>
-                Cấu Hình Cổng Kết Nối UAV (MAVLink ArduPilot)
+                Cấu Hình Cổng Kết Nối UAV
               </h3>
 
               <!-- Lock Hint when UAV is Connected -->

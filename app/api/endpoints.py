@@ -2,10 +2,10 @@ import asyncio
 import json
 import logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional
-from app.vision.video_manager import video_manager, OperationMode
+from app.vision.video_manager import video_manager
 from app.core.mavlink_controller import mavlink_ctrl
 from app.core.gimbal_controller import gimbal_ctrl
 

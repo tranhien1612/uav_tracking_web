@@ -2,7 +2,13 @@ import os
 import cv2
 import numpy as np
 import threading
-from typing import Tuple, Optional, Dict, Any
+from typing import Tuple
+
+# Cache NanoTrack model paths at module level to avoid repeated filesystem lookups
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+_NANOTRACK_DIR = os.path.abspath(os.path.join(_BASE_DIR, "..", "models", "nanotrack"))
+_BACKBONE_ONNX_PATH = os.path.join(_NANOTRACK_DIR, "nanotrack_backbone_sim.onnx")
+_HEAD_ONNX_PATH = os.path.join(_NANOTRACK_DIR, "nanotrack_head_sim.onnx")
 
 class ManualTracker:
     """
@@ -41,25 +47,20 @@ class ManualTracker:
 
     def _create_nanotrack(self):
         """Create OpenCV TrackerNano using ONNX deep learning models."""
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        models_dir = os.path.abspath(os.path.join(base_dir, "..", "models", "nanotrack"))
-        backbone_path = os.path.join(models_dir, "nanotrack_backbone_sim.onnx")
-        head_path = os.path.join(models_dir, "nanotrack_head_sim.onnx")
-
-        if not os.path.exists(backbone_path) or not os.path.exists(head_path):
-            raise FileNotFoundError(f"NanoTrack ONNX model files missing in {models_dir}")
+        if not os.path.exists(_BACKBONE_ONNX_PATH) or not os.path.exists(_HEAD_ONNX_PATH):
+            raise FileNotFoundError(f"NanoTrack ONNX model files missing in {_NANOTRACK_DIR}")
 
         if hasattr(cv2, 'TrackerNano_Params') and hasattr(cv2, 'TrackerNano_create'):
             params = cv2.TrackerNano_Params()
-            params.backbone = backbone_path
-            params.neckhead = head_path
+            params.backbone = _BACKBONE_ONNX_PATH
+            params.neckhead = _HEAD_ONNX_PATH
             params.backend = cv2.dnn.DNN_BACKEND_OPENCV
             params.target = cv2.dnn.DNN_TARGET_CPU
             return cv2.TrackerNano_create(params)
         elif hasattr(cv2, 'TrackerNano') and hasattr(cv2.TrackerNano, 'create'):
             params = cv2.TrackerNano_Params()
-            params.backbone = backbone_path
-            params.neckhead = head_path
+            params.backbone = _BACKBONE_ONNX_PATH
+            params.neckhead = _HEAD_ONNX_PATH
             params.backend = cv2.dnn.DNN_BACKEND_OPENCV
             params.target = cv2.dnn.DNN_TARGET_CPU
             return cv2.TrackerNano.create(params)

@@ -764,17 +764,6 @@ class AeroTrackGCS {
     }
   }
 
-  saveTakeoffSetting() {
-    const altInput = document.getElementById('setting-takeoff-alt');
-    const val = parseFloat(altInput ? altInput.value : 2.5);
-    if (isNaN(val) || val <= 0.2) {
-      return;
-    }
-    this.takeoffAltitude = val;
-    localStorage.setItem('aerotrack_takeoff_alt', String(val));
-    this.closeSettingsModal();
-  }
-
   // --- DYNAMIC FLIGHT ACTION (COMBINED TAKEOFF / LAND) ---
   isUAVInFlight() {
     // UAV is considered in flight if armed and altitude > 0.3m, or if altitude is significant (> 0.5m)
@@ -878,29 +867,6 @@ class AeroTrackGCS {
       }
     } catch (err) {
       this.addLog(`Lỗi hạ cánh: ${err.message}`, 'error');
-    }
-  }
-
-  async saveDeadbandSetting() {
-    const rawX = parseFloat(document.getElementById('setting-deadband-x').value) || 8;
-    const rawY = parseFloat(document.getElementById('setting-deadband-y').value) || 8;
-
-    const dbX = Math.max(0.01, Math.min(0.50, rawX / 100.0));
-    const dbY = Math.max(0.01, Math.min(0.50, rawY / 100.0));
-
-    try {
-      const res = await fetch('/api/settings/deadband', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deadband_x: dbX, deadband_y: dbY })
-      });
-      const data = await res.json();
-      this.deadbandX = data.deadband_x;
-      this.deadbandY = data.deadband_y;
-      this.renderCanvas();
-      this.closeSettingsModal();
-    } catch (err) {
-      this.addLog(`Lỗi cập nhật Deadband: ${err.message}`, 'error');
     }
   }
 

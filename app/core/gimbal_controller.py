@@ -102,7 +102,6 @@ class GimbalController:
         self._yaw_ctrl_cdeg = 0
         self._control_valid = False
         self._is_active_tracking = False
-        self._tracking_start_time = 0.0
         self._target_pitch = 0.0
         self._target_yaw = 0.0
         self._last_track_time = 0.0
