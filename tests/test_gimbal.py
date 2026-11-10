@@ -45,6 +45,29 @@ def test_gimbal_track_target_responsiveness():
     gimbal_ctrl.is_connected = False
     print("GIMBAL TRACKING TESTS PASSED!")
 
+def test_soft_start_prevents_initial_overshoot():
+    gimbal_ctrl.is_connected = True
+    gimbal_ctrl.telemetry["packets_received"] = 1
+    gimbal_ctrl.telemetry["last_updated"] = time.time()
+    gimbal_ctrl.telemetry["pitch"] = 12.0
+    gimbal_ctrl.telemetry["yaw"] = -5.0
+
+    gimbal_ctrl.stop_tracking()
+    assert gimbal_ctrl._target_pitch == 12.0
+    assert gimbal_ctrl._target_yaw == -5.0
+
+    # First frame of tracking
+    gimbal_ctrl.track_target(err_x=0.20, err_y=-0.20)
+    # Pitch should increase smoothly without jumping to 0 or huge jump
+    assert gimbal_ctrl._target_pitch > 12.0
+    # Over 0.05s, angular change should be gentle (< 1.0 deg)
+    assert abs(gimbal_ctrl._target_pitch - 12.0) < 1.0
+
+    gimbal_ctrl.stop_tracking()
+    gimbal_ctrl.is_connected = False
+    print("SOFT-START ANTI-OVERSHOOT TESTS PASSED!")
+
 if __name__ == "__main__":
     test_gimbal_track_target_responsiveness()
+    test_soft_start_prevents_initial_overshoot()
 

@@ -127,7 +127,7 @@
           <div class="telem-item full-row">
             <div style="display: flex; justify-content: space-between; align-items: center;">
               <span class="telem-label">GÓC GIMBAL (P/Y)</span>
-              <span class="telem-val text-primary" id="val-gimbal-angles">0.0° / 0.0°</span>
+              <span class="telem-val text-primary" id="val-gimbal-angles">0.0°/0.0°</span>
             </div>
           </div>
 
@@ -164,7 +164,7 @@
                 <span class="mode-icon">⏹️</span>
                 <div class="mode-text-group">
                   <span class="mode-name">Dừng hoạt động</span>
-                  <span class="mode-hint">Hủy bám điểm</span>
+                  <span class="mode-hint">Hủy quá trình theo dõi mục tiêu</span>
                 </div>
               </div>
             </button>
@@ -177,7 +177,7 @@
                 <span class="mode-icon">🎯</span>
                 <div class="mode-text-group">
                   <span class="mode-name">Theo Dõi Thủ Công</span>
-                  <span class="mode-hint">Khoanh vùng vật thể trên video</span>
+                  <span class="mode-hint">Khoanh vùng vật thể để theo dõi</span>
                 </div>
               </div>
             </button>
@@ -455,7 +455,7 @@
                   <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
                   <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
                 </svg>
-                Cấu Hình Cổng Kết Nối Gimbal Camera (Z-1Mini GCU)
+                Cấu Hình Cổng Kết Nối Gimbal Camera
               </h3>
 
               <div id="gimbal-conn-text" class="settings-lock-hint">
@@ -477,7 +477,7 @@
                 <div class="form-group">
                   <label for="setting-gimbal-baud">Baudrate:</label>
                   <select id="setting-gimbal-baud" class="form-select">
-                    <option value="115200" selected>115200 (Mặc định GCU)</option>
+                    <option value="115200" selected>115200</option>
                     <option value="921600">921600</option>
                     <option value="500000">500000</option>
                     <option value="250000">250000</option>
@@ -539,6 +539,37 @@
         <!-- ========================================== -->
         <div class="settings-tab-pane" id="pane-parameters">
           <div class="settings-tab-grid">
+            <!-- Box 0: Tracking Method (Gimbal vs UAV) -->
+            <div class="settings-section">
+              <h3 class="section-title">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <circle cx="12" cy="12" r="4" />
+                </svg>
+                Phương Thức Bám Mục Tiêu (Tracking Target)
+              </h3>
+
+              <div class="form-group">
+                <label>Chọn thiết bị điều khiển để bám mục tiêu:</label>
+                <div class="conn-type-toggle">
+                  <label class="conn-type-option" id="lbl-target-gimbal">
+                    <input type="radio" name="tracking-target" id="target-gimbal" value="gimbal" checked
+                      onchange="app.onTrackingTargetChange('gimbal')">
+                    <span>Dùng Gimbal</span>
+                  </label>
+                  <label class="conn-type-option" id="lbl-target-uav">
+                    <input type="radio" name="tracking-target" id="target-uav" value="uav"
+                      onchange="app.onTrackingTargetChange('uav')">
+                    <span>Dùng UAV</span>
+                  </label>
+                </div>
+                <span class="form-hint" id="tracking-target-hint"
+                  style="display: block; margin-top: 6px; font-size: 0.74rem; color: var(--text-muted);">
+                  Điều khiển camera Gimbal quay để bám mục tiêu ở tâm khung hình.
+                </span>
+              </div>
+            </div>
+
             <!-- Box 1: Takeoff Settings -->
             <div class="settings-section">
               <h3 class="section-title">

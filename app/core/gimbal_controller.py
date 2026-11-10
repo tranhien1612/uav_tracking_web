@@ -91,6 +91,7 @@ class GimbalController:
         self._running = False
         self._thread: Optional[threading.Thread] = None
         self._lock = threading.Lock()
+        self.last_error = ""
 
         # Hàng đợi lệnh điều khiển với đệm Null (0x00)
         self._cmd_queue = queue.Queue()
@@ -101,6 +102,7 @@ class GimbalController:
         self._yaw_ctrl_cdeg = 0
         self._control_valid = False
         self._is_active_tracking = False
+        self._tracking_start_time = 0.0
         self._target_pitch = 0.0
         self._target_yaw = 0.0
         self._last_track_time = 0.0
@@ -184,7 +186,9 @@ class GimbalController:
         if baudrate:
             self.baudrate = baudrate
 
+        self.last_error = ""
         self.disconnect()
+        time.sleep(0.08)
 
         try:
             logger.info(f"[Gimbal] Đang kết nối tới {self.port} ở baudrate {self.baudrate}...")
@@ -214,6 +218,7 @@ class GimbalController:
             logger.info(f"[Gimbal] Đã kết nối thành công tới {self.port}.")
             return True
         except Exception as e:
+            self.last_error = str(e)
             logger.error(f"[Gimbal] Không thể kết nối cổng {self.port}: {e}")
             self.is_connected = False
             with self._lock:
@@ -388,9 +393,9 @@ class GimbalController:
                     cmd_to_send = CMD_NULL
                     param_to_send = bytes()
                     ctrl_valid = self._control_valid
-                    roll_ctrl = self._roll_ctrl_cdeg if ctrl_valid else 0
-                    pitch_ctrl = self._pitch_ctrl_cdeg if ctrl_valid else 0
-                    yaw_ctrl = self._yaw_ctrl_cdeg if ctrl_valid else 0
+                    roll_ctrl = self._roll_ctrl_cdeg
+                    pitch_ctrl = self._pitch_ctrl_cdeg
+                    yaw_ctrl = self._yaw_ctrl_cdeg
 
             # Gửi gói tin
             packet = self._build_packet(cmd_to_send, param_to_send, roll_ctrl, pitch_ctrl, yaw_ctrl, ctrl_valid)

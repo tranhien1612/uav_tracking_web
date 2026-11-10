@@ -44,12 +44,22 @@ class VideoManager:
         self.max_v_z = settings.MAX_VELOCITY_Z
         self.max_yaw_rate = settings.MAX_YAW_RATE
         
+        # Tracking Actuator Mode: "gimbal" (default) or "uav"
+        self.control_target: str = getattr(settings, "CONTROL_TARGET", "gimbal").lower()
+        if self.control_target not in ["gimbal", "uav"]:
+            self.control_target = "gimbal"
+
         # Live state & clean JPEG buffer
         self.current_frame = None
         self._latest_jpeg: Optional[bytes] = None
         self._jpeg_id = 0
         self.is_running = False
         self._lock = threading.Lock()
+
+        # Pre-encoded placeholder JPEG for when camera stream is waiting / offline
+        self._placeholder_frame = np.zeros((self.height, self.width, 3), dtype=np.uint8)
+        _, placeholder_enc = cv2.imencode('.jpg', self._placeholder_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 60])
+        self._placeholder_jpeg = placeholder_enc.tobytes() if placeholder_enc is not None else b''
         
         self.latest_state: Dict[str, Any] = {
             "mode": self.mode,
@@ -59,9 +69,6 @@ class VideoManager:
             "error_x": 0.0,
             "error_y": 0.0,
             "is_centered": False,
-            "dwell_progress": 0.0,
-            "detected_targets": [],
-            "active_target_id": None,
             "manual_tracking_active": False,
             "tracking_bbox": None,
             "deadband_x": self.deadband_x,
@@ -70,11 +77,7 @@ class VideoManager:
             "rtsp_url": settings.RTSP_URL,
             "rtsp_connected": False,
             "rtsp_status": "CHƯA KẾT NỐI",
-            "gimbal_connected": False,
-            "gimbal_mode": "CHƯA KẾT NỐI",
-            "gimbal_pitch": 0.0,
-            "gimbal_yaw": 0.0,
-            "gimbal_roll": 0.0
+            "control_target": self.control_target
         }
         
         self._thread: Optional[threading.Thread] = None
@@ -110,6 +113,19 @@ class VideoManager:
             self.deadband_x = float(np.clip(deadband_x, 0.01, 0.50))
             self.deadband_y = float(np.clip(deadband_y, 0.01, 0.50))
 
+    def set_control_target(self, target: str):
+        """Switch active tracking actuator: 'gimbal' or 'uav'."""
+        target = target.lower()
+        if target not in ["gimbal", "uav"]:
+            return
+        with self._lock:
+            self.control_target = target
+            if target == "uav":
+                gimbal_ctrl.stop_tracking()
+            elif target == "gimbal":
+                mavlink_ctrl.send_stop()
+            self.latest_state["control_target"] = self.control_target
+
     def set_mode(self, mode: str):
         """Switch mode: STANDBY, TRACKING."""
         mode = mode.upper()
@@ -141,10 +157,6 @@ class VideoManager:
             mavlink_ctrl.send_stop()
             gimbal_ctrl.stop_tracking()
 
-    def _generate_waiting_frame(self) -> np.ndarray:
-        """Generate black placeholder frame when camera feed is offline."""
-        return np.zeros((self.height, self.width, 3), dtype=np.uint8)
-
     def _run_loop(self):
         """
         Continuous video processing & visual servoing pipeline.
@@ -156,22 +168,18 @@ class VideoManager:
             # 1. Grab latest frame synchronized to camera frame rate (Waits up to 33ms)
             ret, raw_frame, is_new = self.rtsp_reader.read_latest(timeout=0.033)
             if not ret or raw_frame is None:
-                # Camera offline / waiting: generate placeholder at 10 FPS to save 100% CPU
-                frame = self._generate_waiting_frame()
-                ret_enc, jpeg_enc = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 60])
+                # Camera offline / waiting: reuse pre-encoded placeholder to save 100% CPU
                 with self._lock:
-                    self.current_frame = frame
-                    if ret_enc:
-                        self._latest_jpeg = jpeg_enc.tobytes()
-                        self._jpeg_id += 1
+                    self.current_frame = self._placeholder_frame
+                    self._latest_jpeg = self._placeholder_jpeg
+                    self._jpeg_id += 1
                     self.latest_state.update({
                         "mode": self.mode,
                         "status_text": self.rtsp_reader.status_msg,
                         "fps": 0.0,
                         "rtsp_url": self.rtsp_reader.rtsp_url,
                         "rtsp_connected": False,
-                        "rtsp_status": self.rtsp_reader.status_msg,
-                        "gimbal": gimbal_ctrl.get_telemetry()
+                        "rtsp_status": self.rtsp_reader.status_msg
                     })
                 time.sleep(0.08)
                 continue
@@ -213,9 +221,6 @@ class VideoManager:
             status_text = "ĐỨNG IM"
             err_x, err_y = 0.0, 0.0
             is_centered = True
-            dwell_progress = 0.0
-            active_target_id = None
-            detected_summary = []
             
             target_vy = 0.0
             target_vz = 0.0
@@ -243,15 +248,20 @@ class VideoManager:
                     status_text = trk_status
 
                     if success:
-                        # 1. Điều khiển Gimbal camera bám sát tâm tuyệt đối (0, 0) ngay lập tức
-                        gimbal_ctrl.track_target(err_x, err_y)
-
-                        # 2. Điều khiển bay UAV chỉ khi vượt ra ngoài vùng deadband của UAV
-                        if not is_centered:
-                            target_vy, target_vz, target_yaw, cmd_up, cmd_down, cmd_left, cmd_right, cmd_yaw_left, cmd_yaw_right = self._compute_visual_servo_commands(err_x, err_y)
-                            cmd_stop = False
-                        else:
+                        if self.control_target == "gimbal":
+                            # 1. Điều khiển Gimbal camera bám sát tâm tuyệt đối (0, 0) ngay lập tức
+                            gimbal_ctrl.track_target(err_x, err_y)
                             cmd_stop = True
+                            status_text = f"{trk_status} (GIMBAL)"
+                        else:
+                            # 2. Không điều khiển gimbal, điều khiển UAV bay (lên/xuống/trái/phải) để bám tâm
+                            gimbal_ctrl.stop_tracking()
+                            if not is_centered:
+                                target_vy, target_vz, target_yaw, cmd_up, cmd_down, cmd_left, cmd_right, cmd_yaw_left, cmd_yaw_right = self._compute_visual_servo_commands(err_x, err_y)
+                                cmd_stop = False
+                            else:
+                                cmd_stop = True
+                            status_text = f"{trk_status} (UAV)"
                     else:
                         cmd_stop = True
                         gimbal_ctrl.stop_tracking()
@@ -281,9 +291,6 @@ class VideoManager:
                     "error_x": round(err_x, 3),
                     "error_y": round(err_y, 3),
                     "is_centered": is_centered,
-                    "dwell_progress": round(dwell_progress, 2),
-                    "detected_targets": detected_summary,
-                    "active_target_id": active_target_id,
                     "manual_tracking_active": self.manual_tracker.is_tracking,
                     "tracking_bbox": [int(v) for v in self.manual_tracker.bbox] if (self.mode == OperationMode.TRACKING and self.manual_tracker.is_tracking and self.manual_tracker.bbox) else None,
                     "deadband_x": round(self.deadband_x, 3),
@@ -292,7 +299,7 @@ class VideoManager:
                     "rtsp_url": self.rtsp_reader.rtsp_url,
                     "rtsp_connected": self.rtsp_reader.is_connected,
                     "rtsp_status": self.rtsp_reader.status_msg,
-                    "gimbal": gimbal_ctrl.get_telemetry()
+                    "control_target": self.control_target
                 })
 
     def _compute_visual_servo_commands(self, err_x: float, err_y: float):
@@ -325,17 +332,6 @@ class VideoManager:
                 cmd_up = True
 
         return vy, vz, yaw_rate, cmd_up, cmd_down, cmd_left, cmd_right, cmd_yaw_left, cmd_yaw_right
-
-    def get_jpeg_frame(self) -> Optional[bytes]:
-        """Return pre-encoded JPEG bytes of the latest clean frame (zero-latency)."""
-        with self._lock:
-            if self._latest_jpeg is not None:
-                return self._latest_jpeg
-            frame = self.current_frame
-        if frame is None:
-            return None
-        ret, jpeg = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 72])
-        return jpeg.tobytes() if ret else None
 
     def get_jpeg_with_id(self) -> Tuple[int, Optional[bytes]]:
         """Return (frame_sequence_id, jpeg_bytes) to eliminate redundant frame streaming."""

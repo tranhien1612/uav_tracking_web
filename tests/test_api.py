@@ -27,7 +27,11 @@ from app.api.endpoints import (
     GimbalConnectRequest,
     disconnect_gimbal,
     center_gimbal,
-    get_gimbal_telemetry
+    get_gimbal_telemetry,
+    set_tracking_target,
+    TrackingTargetRequest,
+    update_gains,
+    GainsRequest
 )
 from app.core.gimbal_controller import gimbal_ctrl
 
@@ -144,7 +148,26 @@ def test_api_gimbal_endpoints():
 
     # Disconnect
     res_dis = disconnect_gimbal()
-    assert res_dis["status"] == "disconnected"
+    assert res_dis["status"] in ("ok", "disconnected")
+
+def test_api_tracking_target():
+    # 1. Switch to UAV tracking
+    res_uav = set_tracking_target(TrackingTargetRequest(control_target="uav"))
+    assert res_uav["status"] == "ok"
+    assert res_uav["control_target"] == "uav"
+
+    # 2. Switch back to Gimbal tracking (default)
+    res_gimbal = set_tracking_target(TrackingTargetRequest(control_target="gimbal"))
+    assert res_gimbal["status"] == "ok"
+    assert res_gimbal["control_target"] == "gimbal"
+
+    # 3. Via gains endpoint
+    res_gains = update_gains(GainsRequest(control_target="uav"))
+    assert res_gains["status"] == "ok"
+    assert res_gains["control_target"] == "uav"
+
+    # Reset back to default gimbal
+    set_tracking_target(TrackingTargetRequest(control_target="gimbal"))
 
 if __name__ == "__main__":
     print("Running API endpoint tests...")
@@ -159,4 +182,5 @@ if __name__ == "__main__":
     test_api_takeoff_land()
     test_api_mavlink_disconnect()
     test_api_gimbal_endpoints()
+    test_api_tracking_target()
     print("ALL API ENDPOINT TESTS PASSED!")

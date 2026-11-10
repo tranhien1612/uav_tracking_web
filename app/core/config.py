@@ -38,9 +38,6 @@ class Settings(BaseModel):
     MAX_VELOCITY_XY: float = 1.2  # Max sway speed m/s
     MAX_VELOCITY_Z: float = 0.8   # Max climb/descend speed m/s
     MAX_YAW_RATE: float = 0.6     # Max yaw rate rad/s (~34 deg/s)
-    
-    # Red Circle Auto Centering
-    DWELL_TIME_SEC: float = 1.0   # Time target must remain centered before switching to next
 
     # Takeoff settings
     DEFAULT_TAKEOFF_ALT: float = float(os.getenv("DEFAULT_TAKEOFF_ALT", "1.0"))  # Default takeoff altitude in meters

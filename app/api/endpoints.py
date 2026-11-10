@@ -56,12 +56,16 @@ class DeadbandRequest(BaseModel):
     deadband_x: float
     deadband_y: float
 
+class TrackingTargetRequest(BaseModel):
+    control_target: str  # "gimbal" or "uav"
+
 class GainsRequest(BaseModel):
     kp_sway: Optional[float] = None
     kp_climb: Optional[float] = None
     kp_yaw: Optional[float] = None
     deadband_x: Optional[float] = None
     deadband_y: Optional[float] = None
+    control_target: Optional[str] = None
 
 @router.get("/video_feed")
 async def video_feed():
@@ -116,10 +120,9 @@ def set_manual_roi(req: ROIRequest):
 
 @router.post("/tracking/cancel")
 def cancel_manual_tracking():
-    """Stop manual tracking and hold position, center gimbal."""
+    """Stop manual tracking and hold position and gimbal orientation."""
     video_manager.cancel_manual_tracking()
-    gimbal_ctrl.center()
-    return {"status": "ok", "message": "Tracking cancelled. UAV holding position, Gimbal centered."}
+    return {"status": "ok", "message": "Tracking cancelled. UAV holding position, Gimbal holding orientation."}
 
 @router.get("/mavlink/serial_ports")
 def get_serial_ports():
@@ -249,6 +252,12 @@ def update_deadband(req: DeadbandRequest):
         "deadband_y": video_manager.deadband_y
     }
 
+@router.post("/settings/tracking_target")
+def set_tracking_target(req: TrackingTargetRequest):
+    """Switch active tracking actuator: 'gimbal' (camera gimbal) or 'uav' (drone body motion)."""
+    video_manager.set_control_target(req.control_target)
+    return {"status": "ok", "control_target": video_manager.control_target}
+
 @router.post("/settings/gains")
 def update_gains(req: GainsRequest):
     """Tune servoing proportional gains and deadband."""
@@ -264,7 +273,9 @@ def update_gains(req: GainsRequest):
         video_manager.deadband_x = req.deadband_x
     if req.deadband_y is not None:
         video_manager.deadband_y = req.deadband_y
-    return {"status": "ok", "message": "Gains updated."}
+    if req.control_target is not None:
+        video_manager.set_control_target(req.control_target)
+    return {"status": "ok", "message": "Gains updated.", "control_target": video_manager.control_target}
 
 # =============================================================================
 # GIMBAL CONTROL ENDPOINTS (CAMERA Z-1MINI GCU PRIVATE PROTOCOL)
@@ -278,18 +289,29 @@ def get_gimbal_serial_ports():
 def connect_gimbal(req: GimbalConnectRequest):
     """Connect to Camera Gimbal Z-1Mini via Serial port."""
     connected = gimbal_ctrl.connect(req.port, req.baud)
-    return {
-        "status": "connected" if connected else "failed",
-        "connected": connected,
-        "port": gimbal_ctrl.port,
-        "baud": gimbal_ctrl.baudrate
-    }
+    if connected:
+        return {
+            "status": "ok",
+            "connected": True,
+            "port": gimbal_ctrl.port,
+            "baud": gimbal_ctrl.baudrate,
+            "message": f"Đã kết nối Gimbal tại {gimbal_ctrl.port} ({gimbal_ctrl.baudrate} bps)"
+        }
+    else:
+        err_msg = getattr(gimbal_ctrl, "last_error", "") or "Không thể mở cổng Serial hoặc thiết bị không phản hồi"
+        return {
+            "status": "failed",
+            "connected": False,
+            "detail": err_msg,
+            "port": req.port,
+            "baud": req.baud
+        }
 
 @router.post("/gimbal/disconnect")
 def disconnect_gimbal():
     """Disconnect Camera Gimbal serial connection."""
     gimbal_ctrl.disconnect()
-    return {"status": "disconnected", "connected": False}
+    return {"status": "ok", "connected": False}
 
 @router.post("/gimbal/center")
 def center_gimbal():

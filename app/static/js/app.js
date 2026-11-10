@@ -26,6 +26,7 @@ class AeroTrackGCS {
     this._isTogglingMavlink = false;
     this.gimbalConnected = false;
     this._isTogglingGimbal = false;
+    this.controlTarget = 'gimbal'; // 'gimbal' (default) or 'uav'
     this.rtspConnected = false;
     this.lastRtspConnectedState = null;
     this._toastTimer = null;
@@ -286,6 +287,30 @@ class AeroTrackGCS {
       videoBadge.textContent = this.rtspConnected ? 'Đã kết nối Camera' : 'Chưa có tín hiệu';
       videoBadge.className = this.rtspConnected ? 'telem-val text-success' : 'telem-val text-warning';
     }
+
+    // Sync Tracking Target Radio (Gimbal vs UAV)
+    const radioGimbal = document.getElementById('target-gimbal');
+    const radioUav = document.getElementById('target-uav');
+    if (radioGimbal && radioUav) {
+      if (this.controlTarget === 'uav') {
+        radioUav.checked = true;
+      } else {
+        radioGimbal.checked = true;
+      }
+      this.onTrackingTargetChange(this.controlTarget || 'gimbal');
+    }
+  }
+
+  onTrackingTargetChange(target) {
+    this.controlTarget = target || 'gimbal';
+    const hint = document.getElementById('tracking-target-hint');
+    if (hint) {
+      if (this.controlTarget === 'gimbal') {
+        hint.textContent = 'Điều khiển camera Gimbal quay để bám mục tiêu ở tâm khung hình (UAV giữ vị trí).';
+      } else {
+        hint.textContent = 'Giữ cố định camera Gimbal, điều khiển UAV bay (lên, xuống, trái, phải) để bám mục tiêu.';
+      }
+    }
   }
 
   updateMavlinkUIState(connected) {
@@ -381,12 +406,13 @@ class AeroTrackGCS {
 
       if (data.ports && data.ports.length > 0) {
         data.ports.forEach(p => {
+          const dev = (p.device || '').replace(/\s*\(.*?\)/g, '').trim();
           const opt = document.createElement('option');
-          opt.value = p.device;
-          opt.textContent = `${p.device} (${p.description || p.device})`;
+          opt.value = dev;
+          opt.textContent = dev;
           const descLower = (p.description || '').toLowerCase();
           if (descLower.includes('ardupilot') || descLower.includes('pixhawk') || descLower.includes('cube')) {
-            preferredPort = p.device;
+            preferredPort = dev;
           }
           select.appendChild(opt);
         });
@@ -394,7 +420,7 @@ class AeroTrackGCS {
         if (preferredPort) {
           select.value = preferredPort;
         } else {
-          select.value = data.ports[0].device;
+          select.value = (data.ports[0].device || '').replace(/\s*\(.*?\)/g, '').trim();
         }
       } else {
         const opt = document.createElement('option');
@@ -423,13 +449,14 @@ class AeroTrackGCS {
 
       if (data.ports && data.ports.length > 0) {
         data.ports.forEach(p => {
+          const dev = (p.device || '').replace(/\s*\(.*?\)/g, '').trim();
           const opt = document.createElement('option');
-          opt.value = p.device;
-          opt.textContent = `${p.device} (${p.description || p.device})`;
+          opt.value = dev;
+          opt.textContent = dev;
           const descLower = (p.description || '').toLowerCase();
-          const devLower = (p.device || '').toLowerCase();
+          const devLower = dev.toLowerCase();
           if (devLower.includes('ttyusb') || devLower.includes('ttyacm') || descLower.includes('usb') || descLower.includes('ch340') || descLower.includes('cp210')) {
-            if (!preferredPort) preferredPort = p.device;
+            if (!preferredPort) preferredPort = dev;
           }
           select.appendChild(opt);
         });
@@ -437,7 +464,7 @@ class AeroTrackGCS {
         if (preferredPort) {
           select.value = preferredPort;
         } else {
-          select.value = data.ports[0].device;
+          select.value = (data.ports[0].device || '').replace(/\s*\(.*?\)/g, '').trim();
         }
       } else {
         const opt = document.createElement('option');
@@ -462,7 +489,7 @@ class AeroTrackGCS {
       if (this.gimbalConnected) {
         const res = await fetch('/api/gimbal/disconnect', { method: 'POST' });
         const data = await res.json();
-        if (data.status === 'ok') {
+        if (data.status === 'ok' || data.status === 'disconnected' || !data.connected) {
           this.addLog('Đã ngắt kết nối Gimbal.', 'info');
           this.gimbalConnected = false;
         } else {
@@ -485,12 +512,13 @@ class AeroTrackGCS {
           body: JSON.stringify({ port, baud })
         });
         const data = await res.json();
-        if (data.status === 'ok') {
+        if (data.status === 'ok' || data.status === 'connected' || data.connected) {
           this.addLog(`Đã kết nối Gimbal qua cổng ${port} (${baud} bps).`, 'success');
           this.gimbalConnected = true;
         } else {
-          this.addLog(`Lỗi kết nối Gimbal: ${data.detail || 'Không kết nối được'}`, 'warn');
-          alert(`Không thể kết nối Gimbal: ${data.detail || 'Lỗi cổng serial'}`);
+          const detail = data.detail || 'Không kết nối được cổng Serial';
+          this.addLog(`Lỗi kết nối Gimbal: ${detail}`, 'warn');
+          alert(`Không thể kết nối Gimbal: ${detail}`);
         }
       }
     } catch (err) {
@@ -622,6 +650,11 @@ class AeroTrackGCS {
   }
 
   async saveAllParameters() {
+    // 0. Tracking Target Actuator (Gimbal vs UAV)
+    const targetEl = document.querySelector('input[name="tracking-target"]:checked');
+    const controlTarget = targetEl ? targetEl.value : (this.controlTarget || 'gimbal');
+    this.controlTarget = controlTarget;
+
     // 1. Takeoff Altitude
     const altInput = document.getElementById('setting-takeoff-alt');
     const valAlt = parseFloat(altInput ? altInput.value : 1.0);
@@ -642,6 +675,13 @@ class AeroTrackGCS {
     const kpYaw = parseFloat(document.getElementById('setting-kp-yaw').value) || 0.6;
 
     try {
+      // Save Tracking Target
+      await fetch('/api/settings/tracking_target', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ control_target: controlTarget })
+      }).catch(console.error);
+
       // Save Deadband
       const resDb = await fetch('/api/settings/deadband', {
         method: 'POST',
@@ -661,10 +701,12 @@ class AeroTrackGCS {
           kp_climb: kpClimb,
           kp_yaw: kpYaw,
           deadband_x: dbX,
-          deadband_y: dbY
+          deadband_y: dbY,
+          control_target: controlTarget
         })
       });
 
+      this.addLog(`Đã cập nhật phương thức bám: ${controlTarget === 'uav' ? '🚁 Dùng UAV' : '📷 Dùng Gimbal'}`, 'info');
       this.renderCanvas();
       this.closeSettingsModal();
     } catch (err) {
@@ -1013,7 +1055,7 @@ class AeroTrackGCS {
     const scaleX = this.canvas.width / this.nativeWidth;
     const scaleY = this.canvas.height / this.nativeHeight;
 
-    // 1. Draw Deadband Box at center (TRACKING mode only)
+    // 1. Draw Deadband Region at center: 4 white corner brackets + white "+" crosshair
     if (this.currentMode === 'TRACKING') {
       const cx = this.canvas.width / 2;
       const cy = this.canvas.height / 2;
@@ -1023,20 +1065,45 @@ class AeroTrackGCS {
       const dbY = cy - dbH / 2;
 
       this.ctx.save();
-      this.ctx.strokeStyle = 'rgba(56, 189, 248, 0.75)';
-      this.ctx.lineWidth = 1.5;
-      this.ctx.setLineDash([5, 4]);
-      this.ctx.strokeRect(dbX, dbY, dbW, dbH);
-
-      // Center crosshair tick
+      this.ctx.strokeStyle = '#ffffff';
+      this.ctx.lineWidth = 2.0;
+      this.ctx.lineCap = 'square';
       this.ctx.setLineDash([]);
-      this.ctx.strokeStyle = 'rgba(56, 189, 248, 0.6)';
-      this.ctx.lineWidth = 1;
+      // Subtle drop shadow ensures visibility over bright/white video backgrounds
+      this.ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+      this.ctx.shadowBlur = 3;
+
+      // Corner bracket length: proportional to box size, clamped between 10px and 20px
+      const cl = Math.max(10, Math.min(20, Math.min(dbW, dbH) * 0.28));
+
       this.ctx.beginPath();
-      this.ctx.moveTo(cx - 7, cy);
-      this.ctx.lineTo(cx + 7, cy);
-      this.ctx.moveTo(cx, cy - 7);
-      this.ctx.lineTo(cx, cy + 7);
+      // Góc trên bên trái (Top-Left)
+      this.ctx.moveTo(dbX, dbY + cl);
+      this.ctx.lineTo(dbX, dbY);
+      this.ctx.lineTo(dbX + cl, dbY);
+
+      // Góc trên bên phải (Top-Right)
+      this.ctx.moveTo(dbX + dbW - cl, dbY);
+      this.ctx.lineTo(dbX + dbW, dbY);
+      this.ctx.lineTo(dbX + dbW, dbY + cl);
+
+      // Góc dưới bên phải (Bottom-Right)
+      this.ctx.moveTo(dbX + dbW, dbY + dbH - cl);
+      this.ctx.lineTo(dbX + dbW, dbY + dbH);
+      this.ctx.lineTo(dbX + dbW - cl, dbY + dbH);
+
+      // Góc dưới bên trái (Bottom-Left)
+      this.ctx.moveTo(dbX + cl, dbY + dbH);
+      this.ctx.lineTo(dbX, dbY + dbH);
+      this.ctx.lineTo(dbX, dbY + dbH - cl);
+
+      // Dấu "+" màu trắng ở chính giữa tâm
+      const crossLen = 9;
+      this.ctx.moveTo(cx - crossLen, cy);
+      this.ctx.lineTo(cx + crossLen, cy);
+      this.ctx.moveTo(cx, cy - crossLen);
+      this.ctx.lineTo(cx, cy + crossLen);
+
       this.ctx.stroke();
       this.ctx.restore();
     }
@@ -1305,7 +1372,7 @@ class AeroTrackGCS {
     if (valGimbalAngles) {
       const p = (gimbal.pitch !== undefined) ? Number(gimbal.pitch).toFixed(1) : '0.0';
       const y = (gimbal.yaw !== undefined) ? Number(gimbal.yaw).toFixed(1) : '0.0';
-      valGimbalAngles.textContent = `${p}° / ${y}°`;
+      valGimbalAngles.textContent = `${p}°/${y}°`;
     }
 
     // Modal Gimbal tab status & controls
@@ -1368,7 +1435,7 @@ class AeroTrackGCS {
         if (!optFound) {
           const opt = document.createElement('option');
           opt.value = telem.connection_str;
-          opt.textContent = `${telem.connection_str} (Đang kết nối)`;
+          opt.textContent = telem.connection_str;
           portSelect.appendChild(opt);
         }
         portSelect.value = telem.connection_str;
@@ -1383,7 +1450,7 @@ class AeroTrackGCS {
     if (vision.deadband_x !== undefined) this.deadbandX = vision.deadband_x;
     if (vision.deadband_y !== undefined) this.deadbandY = vision.deadband_y;
     this.isCentered = !!vision.is_centered;
-    this.dwellProgress = vision.dwell_progress || 0.0;
+    if (vision.control_target) this.controlTarget = vision.control_target;
 
     if (this.currentMode === 'TRACKING') {
       if (this.isSelectingROI || this.isDrawingROI) {
